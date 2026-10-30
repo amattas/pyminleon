@@ -3,7 +3,7 @@
 Asyncio Python library that controls the built-in effects of Minleon NDB-Pro LED controllers over the HTTP endpoints
 the controller's own web UI uses. Zero runtime dependencies (stdlib only), Python 3.12+.
 
-It does not send pixel data. For that, use a DDP sender such as [pyddp](https://github.com/amattas/pyddp). While DDP
+It does not send pixel data. For that, use a DDP sender such as [aioddp](https://github.com/amattas/aioddp). While DDP
 data flows it overrides the built-in effect; about 20 s after DDP stops the controller falls back to it.
 
 ## Quick start
