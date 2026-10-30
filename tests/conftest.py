@@ -73,7 +73,8 @@ class HTTPController:
             body = body if body is not None else b"not found"
             response = (
                 f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {len(body)}\r\n"
-                "Connection: close\r\n\r\n".encode() + body
+                "Connection: close\r\n\r\n".encode()
+                + body
             )
             mode = self.slow.get(path)
             if mode == "head":

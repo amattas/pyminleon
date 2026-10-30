@@ -60,7 +60,7 @@ asyncio.run(main())
 conda create -n pyminleon -c conda-forge python=3.14
 conda run -n pyminleon python -m pip install -e ".[dev]"
 conda run -n pyminleon python -m pytest -q
-conda run -n pyminleon ruff check . && conda run -n pyminleon black --check . && conda run -n pyminleon mypy
+conda run -n pyminleon ruff check . && conda run -n pyminleon ruff format --check . && conda run -n pyminleon mypy
 conda run -n pyminleon bandit -q -r src
 conda run -n pyminleon python scripts/check_coverage.py
 ```
