@@ -3,13 +3,13 @@
 ## Project Overview
 
 **Purpose**: Standalone asyncio Python library that controls Minleon NDB-Pro LED controllers' built-in effects over the
-HTTP endpoints the controller's web UI uses. Extracted from pyddp so pyddp stays a pure DDP (UDP pixel) library.
+HTTP endpoints the controller's web UI uses. Extracted from aioddp so aioddp stays a pure DDP (UDP pixel) library.
 
 **Features**: `NDBController` (`state`, `presets`, `set_effect`, `set_intensity`, `recall_preset`, `config`,
 `status`), `identify(host)`, `SUPPORTED_MODELS`. Zero runtime dependencies.
 
 ### What This Is NOT
-- Not a DDP sender (pyddp is) and not a Home Assistant integration (hass-ddp is; it imports pyminleon)
+- Not a DDP sender (aioddp is) and not a Home Assistant integration (hass-ddp is; it imports pyminleon)
 - Not a writer of controller settings: no saved config, no preset saves
 
 ## Architecture
