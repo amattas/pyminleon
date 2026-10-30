@@ -55,7 +55,7 @@ Coverage gates: 90% total, 90% on `ndb.py` and `_http.py`.
 
 - `src/pyminleon` layout, hatchling, `requires-python >=3.12`, `dependencies = []`, extra: `dev`
 - ruff (lint + format) line length 120, rules `E, F, I, B, UP, SIM, S`; mypy strict; bandit
-- Standard `logging`; CI is `workflow_dispatch` only
+- Standard `logging`; the Checks workflow runs on push to main and on approved pull requests
 
 ## License
 
