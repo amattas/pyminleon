@@ -36,7 +36,7 @@ Python env is the conda env `pyminleon` (never base, never venv).
 ```bash
 conda run -n pyminleon python -m pytest -q
 conda run -n pyminleon ruff check .
-conda run -n pyminleon black --check .
+conda run -n pyminleon ruff format --check .
 conda run -n pyminleon mypy
 conda run -n pyminleon bandit -q -r src
 conda run -n pyminleon python scripts/check_coverage.py
@@ -54,7 +54,7 @@ Coverage gates: 90% total, 90% on `ndb.py` and `_http.py`.
 ## Technical Decisions
 
 - `src/pyminleon` layout, hatchling, `requires-python >=3.12`, `dependencies = []`, extra: `dev`
-- black line length 120; ruff `E, F, I, B, UP, SIM, S`; mypy strict; bandit
+- ruff (lint + format) line length 120, rules `E, F, I, B, UP, SIM, S`; mypy strict; bandit
 - Standard `logging`; CI is `workflow_dispatch` only
 
 ## License
