@@ -48,8 +48,18 @@ def test_url_rejects_malformed_path(path: str) -> None:
         ("chunked", NDB_CONFIG_JSON, None),
         ("chunked", b" " * (64 * 1024 + 1), "more than"),
         ("badchunk", NDB_CONFIG_JSON, "chunk size"),
+        ("badlength", NDB_CONFIG_JSON, None),  # unparsable Content-Length is treated as absent: read to EOF
+        ("badstatus", NDB_CONFIG_JSON, "answered None"),  # unparsable status is non-200
     ],
-    ids=["unframed", "unframed-oversized", "chunked", "chunked-oversized", "chunked-malformed"],
+    ids=[
+        "unframed",
+        "unframed-oversized",
+        "chunked",
+        "chunked-oversized",
+        "chunked-malformed",
+        "non-ascii-length",
+        "non-ascii-status",
+    ],
 )
 async def test_reads_unframed_or_chunked_body(
     http_controller: HTTPController, mode: str, body: bytes, expected: str | None

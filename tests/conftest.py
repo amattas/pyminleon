@@ -29,7 +29,8 @@ class HTTPController:
     ``"body"`` sends headers, then one body byte every 0.1 s; ``"head"`` sends the whole response one byte every
     0.1 s; both stop when the client hangs up. ``"chunked"`` sends the route's body chunked (``"badchunk"``
     with a malformed size), and
-    ``"nolength"`` sends the route's body without a Content-Length header.
+    ``"nolength"`` sends the route's body without a Content-Length header, ``"badstatus"`` answers
+    ``HTTP/1.0 2² OK`` and ``"badlength"`` sends ``Content-Length: ²`` (non-ASCII digits).
     """
 
     host: str = "127.0.0.1"
@@ -82,6 +83,12 @@ class HTTPController:
                 await self._drip(reader, writer, b" " * 200)
             elif mode == "nolength":
                 writer.write(b"HTTP/1.0 200 OK\r\n\r\n" + body)
+                await writer.drain()
+            elif mode == "badstatus":
+                writer.write("HTTP/1.0 2\u00b2 OK\r\n\r\n".encode("latin-1") + body)
+                await writer.drain()
+            elif mode == "badlength":
+                writer.write("HTTP/1.0 200 OK\r\nContent-Length: \u00b2\r\n\r\n".encode("latin-1") + body)
                 await writer.drain()
             elif mode in ("chunked", "badchunk"):
                 # What the NDB-Pro firmware sends: HTTP/1.1, chunked, lower-case hex sizes, even to HTTP/1.0 requests.

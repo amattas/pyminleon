@@ -78,11 +78,16 @@ def url(host: str, port: int, path: str) -> str:
     return f"http://{url_host(host)}:{port}{request_path(path)}"
 
 
+def _is_ascii_digits(text: str) -> bool:
+    """``str.isdigit()`` also accepts digits such as ``"\u00b2"`` that ``int()`` rejects."""
+    return text.isascii() and text.isdigit()
+
+
 def _parse_head(head: bytes) -> tuple[int | None, dict[str, str]]:
     """Status code (``None`` if unparsable) and lower-cased headers of an HTTP response head."""
     status_line, *lines = head.decode("latin-1").split("\r\n")
     parts = status_line.split(" ", 2)
-    status = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else None
+    status = int(parts[1]) if len(parts) >= 2 and _is_ascii_digits(parts[1]) else None
     headers: dict[str, str] = {}
     for line in lines:
         name, sep, value = line.partition(":")
@@ -145,7 +150,7 @@ async def _exchange(host_part: str, port: int, payload: bytes, method: str, full
             # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
             return Response(status, await _read_chunked(reader, full_url))
         raw_length = headers.get("content-length", "")
-        length = int(raw_length) if raw_length.isdigit() else None
+        length = int(raw_length) if _is_ascii_digits(raw_length) else None  # unparsable: read to EOF
         if length is not None and length > MAX_BODY:
             raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
         received = bytearray()

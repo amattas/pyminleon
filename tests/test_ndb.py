@@ -297,8 +297,8 @@ async def test_identify_is_none_when_nothing_answers_in_time() -> None:
     assert await identify("127.0.0.1", port=_closed_tcp_port(), timeout=0.5) is None
 
 
-@pytest.mark.parametrize("mode", ["head", "body"])
-async def test_identify_is_none_on_slow_host(http_controller: HTTPController, mode: str) -> None:
+@pytest.mark.parametrize("mode", ["head", "body", "badstatus"])
+async def test_identify_is_none_on_misbehaving_host(http_controller: HTTPController, mode: str) -> None:
     http_controller.slow["/api/status"] = mode
     assert await identify(http_controller.host, port=http_controller.port, timeout=0.3) is None
 
