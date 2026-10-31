@@ -54,6 +54,10 @@ asyncio.run(main())
 - HTTP responses are size-capped (64 KiB), redirects are never followed, and each call is bounded by `timeout`.
 - Hosts are validated (hostname, IPv4, or IPv6 literal only) so a value can never steer the path, port, or scheme.
 
+## Documentation
+
+https://amattas.github.io/pyminleon/
+
 ## Development
 
 ```bash
@@ -62,7 +66,6 @@ conda run -n pyminleon python -m pip install -e ".[dev]"
 conda run -n pyminleon python -m pytest -q
 conda run -n pyminleon ruff check . && conda run -n pyminleon ruff format --check . && conda run -n pyminleon mypy
 conda run -n pyminleon bandit -q -r src
-conda run -n pyminleon python scripts/check_coverage.py
 ```
 
 ## License

@@ -32,12 +32,20 @@ dev = [
     "pytest-cov==7.1.0",
     "mypy==2.3.0",
     "ruff==0.17.2",
-    "pre-commit==4.6.0",
-    "build==1.5.0",
+    "pre-commit==4.7.0",
+    "build==1.6.1",
     "bandit==1.9.4",
+    # tests/docs (the docs publishing contract tests) parse YAML.
+    "pyyaml==6.0.3",
+    "types-PyYAML==6.0.12.20260906",
+]
+docs = [
+    "zensical==0.0.50",
+    "pydoc-markdown==4.8.2",
 ]
 
 [project.urls]
+Documentation = "https://amattas.github.io/pyminleon/"
 Source = "https://github.com/amattas/pyminleon"
 
 [tool.hatch.build.targets.wheel]
@@ -47,7 +55,7 @@ packages = ["src/pyminleon"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--cov --cov-report=term-missing:skip-covered --cov-report=json"
+addopts = "--cov --cov-report=term-missing:skip-covered"
 
 [tool.coverage.run]
 source = ["src/pyminleon"]
@@ -56,3 +64,12 @@ branch = true
 [tool.coverage.report]
 fail_under = 90
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError", "\\.\\.\\."]
+
+[tool.mypy]
+# Pinned to the project Python floor so results don't drift with the runner's interpreter.
+python_version = "3.12"
+files = ["src", "tests", "scripts"]
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true

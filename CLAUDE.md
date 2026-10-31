@@ -39,10 +39,9 @@ conda run -n pyminleon ruff check .
 conda run -n pyminleon ruff format --check .
 conda run -n pyminleon mypy
 conda run -n pyminleon bandit -q -r src
-conda run -n pyminleon python scripts/check_coverage.py
 ```
 
-Coverage gates: 90% total, 90% on `ndb.py` and `_http.py`.
+Coverage gate: 90% total branch coverage (`fail_under` in pyproject.toml; every pytest run enforces it).
 
 ## Testing Approach
 

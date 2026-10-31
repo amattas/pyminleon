@@ -24,3 +24,8 @@ coverage.xml
 
 
 coverage.json
+
+# Zensical docs: built site, cache, and generated API reference
+/site
+.cache/
+docs/api/reference.md
