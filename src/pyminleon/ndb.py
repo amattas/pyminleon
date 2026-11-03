@@ -169,7 +169,7 @@ async def identify(host: str, *, port: int = 80, timeout: float = 3.0) -> str | 
 def _decode_object(page: str, url: str) -> dict[str, Any]:
     try:
         document = json.loads(page)
-    except ValueError:
+    except (ValueError, RecursionError):  # json recurses per nesting level before Python 3.14
         raise ControllerError(f"{url} is not valid JSON") from None
     if not isinstance(document, dict):
         raise ControllerError(f"{url} is not a JSON object")

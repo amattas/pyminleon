@@ -248,8 +248,14 @@ async def test_config_and_status_return_the_raw_documents(
 
 @pytest.mark.parametrize(
     ("body", "match"),
-    [(None, "404"), (b"[1, 2]", "JSON object"), (b"not json", "valid JSON"), (b"\xff\xfe", "UTF-8")],
-    ids=["non-200", "not-an-object", "not-json", "not-utf8"],
+    [
+        (None, "404"),
+        (b"[1, 2]", "JSON object"),
+        (b"not json", "valid JSON"),
+        (b"\xff\xfe", "UTF-8"),
+        (b"[" * 60_000, "valid JSON"),  # RecursionError in json on Python < 3.14
+    ],
+    ids=["non-200", "not-an-object", "not-json", "not-utf8", "nested-past-recursion-limit"],
 )
 @pytest.mark.parametrize("method", ["config", "status"])
 async def test_config_and_status_reject_unusable_answers(
