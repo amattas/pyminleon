@@ -40,6 +40,9 @@ def test_url_rejects_malformed_path(path: str) -> None:
         http_url("127.0.0.1", 80, path)
 
 
+_CHUNKED = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+
+
 @pytest.mark.parametrize(
     ("mode", "body", "expected"),
     [
@@ -58,6 +61,14 @@ def test_url_rejects_malformed_path(path: str) -> None:
             b"HTTP/1.1 200 OK\r\nContent-Length: %s%d\r\n\r\n%s" % (b"0" * 5000, len(NDB_CONFIG_JSON), NDB_CONFIG_JSON),
             None,
         ),
+        # Chunk extensions and trailers are skipped but count against MAX_HEAD in total.
+        (
+            "raw",
+            _CHUNKED + b"%x;ext=1\r\n%s\r\n0\r\nX-Trailer: 1\r\n\r\n" % (len(NDB_CONFIG_JSON), NDB_CONFIG_JSON),
+            None,
+        ),
+        ("raw", _CHUNKED + b"1;" + b"e" * 9000 + b"\r\n{\r\n1;" + b"e" * 9000 + b"\r\n}\r\n0\r\n\r\n", "extensions"),
+        ("raw", _CHUNKED + b"2\r\n{}\r\n0\r\n" + b"X-Trailer: 1\r\n" * 2000 + b"\r\n", "trailers"),
     ],
     ids=[
         "unframed",
@@ -70,6 +81,9 @@ def test_url_rejects_malformed_path(path: str) -> None:
         "status-past-int-digit-limit",
         "length-past-int-digit-limit",
         "zero-padded-length-past-int-digit-limit",
+        "chunk-extension-and-trailer",
+        "chunk-extensions-past-cap",
+        "trailers-past-cap",
     ],
 )
 async def test_reads_unframed_or_chunked_body(

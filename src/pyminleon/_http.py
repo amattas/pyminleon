@@ -141,12 +141,28 @@ async def request(
 
 
 async def _read_chunked(reader: asyncio.StreamReader, full_url: str) -> bytes:
-    """A chunked body, capped at ``MAX_BODY``; trailers are skipped. ``ControllerError`` on malformed framing."""
+    """A chunked body, capped at ``MAX_BODY``. ``ControllerError`` on malformed framing.
+
+    Chunk extensions and trailer fields are skipped, but together they are capped at ``MAX_HEAD`` bytes: each line is
+    already bounded by the reader's limit, and this bounds their number, so a server cannot stream framing forever.
+    """
     received = bytearray()
+    skipped = 0
+
+    def skip(count: int, what: str) -> None:
+        nonlocal skipped
+        skipped += count
+        if skipped > MAX_HEAD:
+            raise ControllerError(
+                f"{full_url} sent more than {MAX_HEAD} bytes of chunk extensions and trailers ({what})"
+            )
+
     while True:
-        size_text = (await reader.readuntil(b"\r\n"))[:-2].split(b";", 1)[0].strip()
+        line = (await reader.readuntil(b"\r\n"))[:-2]
+        size_text = line.split(b";", 1)[0].strip()
         if not _CHUNK_SIZE.fullmatch(size_text):
             raise ControllerError(f"{full_url} sent a malformed chunk size {size_text[:20]!r}")
+        skip(len(line) - len(size_text), "extensions")
         size = int(size_text, 16)
         if size == 0:
             break
@@ -155,8 +171,8 @@ async def _read_chunked(reader: asyncio.StreamReader, full_url: str) -> bytes:
         received += await reader.readexactly(size)
         if await reader.readexactly(2) != b"\r\n":
             raise ControllerError(f"{full_url} sent a chunk without its closing CRLF")
-    while (await reader.readuntil(b"\r\n")) != b"\r\n":
-        pass  # trailer fields
+    while (line := await reader.readuntil(b"\r\n")) != b"\r\n":
+        skip(len(line), "trailers")
     return bytes(received)
 
 
