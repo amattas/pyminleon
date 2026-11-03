@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from pyminleon import ConfigError, ControllerError, NDBController, NDBPreset, NDBState, identify
+from pyminleon.ndb import _decode_object
 from tests.conftest import NDB_PAGES, NDB_STATUS_JSON, HTTPController
 
 PAGE_EFFECTS = (
@@ -253,9 +254,8 @@ async def test_config_and_status_return_the_raw_documents(
         (b"[1, 2]", "JSON object"),
         (b"not json", "valid JSON"),
         (b"\xff\xfe", "UTF-8"),
-        (b"[" * 60_000, "valid JSON"),  # RecursionError in json on Python < 3.14
     ],
-    ids=["non-200", "not-an-object", "not-json", "not-utf8", "nested-past-recursion-limit"],
+    ids=["non-200", "not-an-object", "not-json", "not-utf8"],
 )
 @pytest.mark.parametrize("method", ["config", "status"])
 async def test_config_and_status_reject_unusable_answers(
@@ -264,6 +264,14 @@ async def test_config_and_status_reject_unusable_answers(
     http_controller.routes[f"/api/{method}"] = body
     with pytest.raises(ControllerError, match=match):
         await getattr(_controller(http_controller), method)()
+
+
+def test_deeply_nested_json_is_not_valid_json() -> None:
+    # json recurses per nesting level and raises RecursionError past the interpreter's limit (a counter before
+    # Python 3.14, the C stack from 3.14). Past MAX_BODY, so fed to the decoder directly.
+    page = '{"a": ' + "[" * 1_000_000 + "]" * 1_000_000 + "}"
+    with pytest.raises(ControllerError, match="valid JSON"):
+        _decode_object(page, "http://ndb/api/status")
 
 
 @pytest.mark.parametrize(

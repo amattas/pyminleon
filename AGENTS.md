@@ -49,10 +49,6 @@ Coverage gate: 90% total branch coverage (`fail_under` in pyproject.toml; every 
 - `http_controller` fixture: real asyncio HTTP server on loopback serving pages captured from a real NDB-Pro
   (`tests/fixtures/ndbpro/`), with slow, chunked, unframed, and redirect modes; no mocking of the client
 - `no_leaked_tasks` autouse fixture enforces no orphaned asyncio tasks
-- Fuzzing: atheris targets `fuzz/fuzz_*.py` (each `check()` is the exception contract) run by ClusterFuzzLite
-  (`.clusterfuzzlite/`; 600 s per target on PRs inside Checks, 3600 s via the manual Fuzz workflow).
-  `tests/test_fuzz_corpus.py` replays `fuzz/corpus/<target>/`; add every crash input there. Hypothesis property
-  tests (`tests/test_ndb_properties.py`) cover the HTML/JSON page parsers
 
 ## Technical Decisions
 

@@ -27,12 +27,7 @@ _CHUNK_SIZE = re.compile(rb"[0-9A-Fa-f]{1,8}")
 _HOSTNAME = re.compile(r"[A-Za-z0-9.-]+")
 
 # What a failed exchange raises out of ``request``: no route, refused, reset, timed out, or a truncated/oversized head.
-TRANSPORT_ERRORS = (
-    TimeoutError,
-    OSError,
-    asyncio.IncompleteReadError,
-    asyncio.LimitOverrunError,
-)
+TRANSPORT_ERRORS = (TimeoutError, OSError, asyncio.IncompleteReadError, asyncio.LimitOverrunError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,13 +110,7 @@ def _parse_head(head: bytes) -> tuple[int | None, dict[str, str]]:
 
 
 async def request(
-    host: str,
-    port: int,
-    path: str,
-    *,
-    timeout: float,
-    method: str = "GET",
-    body: bytes | None = None,
+    host: str, port: int, path: str, *, timeout: float, method: str = "GET", body: bytes | None = None
 ) -> Response:
     """One HTTP/1.0 exchange under one deadline. Redirects are never followed.
 
