@@ -29,3 +29,6 @@ coverage.json
 /site
 .cache/
 docs/api/reference.md
+
+# Local AI tooling state (hygiene standard)
+.claude/
