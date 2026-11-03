@@ -266,12 +266,15 @@ async def test_config_and_status_reject_unusable_answers(
         await getattr(_controller(http_controller), method)()
 
 
-def test_deeply_nested_json_is_not_valid_json() -> None:
-    # json recurses per nesting level and raises RecursionError past the interpreter's limit (a counter before
-    # Python 3.14, the C stack from 3.14). Past MAX_BODY, so fed to the decoder directly.
-    page = '{"a": ' + "[" * 1_000_000 + "]" * 1_000_000 + "}"
+def test_deeply_nested_json_is_not_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    # json.loads raises RecursionError past the interpreter's limit, which depends on the platform (C stack size
+    # from Python 3.14); raise it deterministically instead of relying on a huge input.
+    def too_deep(*args: object, **kwargs: object) -> object:
+        raise RecursionError
+
+    monkeypatch.setattr(json, "loads", too_deep)
     with pytest.raises(ControllerError, match="valid JSON"):
-        _decode_object(page, "http://ndb/api/status")
+        _decode_object("{}", "http://ndb/api/status")
 
 
 @pytest.mark.parametrize(

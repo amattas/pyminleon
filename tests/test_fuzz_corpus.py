@@ -1,4 +1,4 @@
-"""Replay every fuzz/corpus/<target>/ input through that atheris target's ``check`` (its exception contract)."""
+"""Replay every fuzz/corpus/<target>/ input through that atheris target's ``test_one_input`` (its contract)."""
 
 from __future__ import annotations
 
@@ -22,4 +22,4 @@ def _target(name: str) -> ModuleType:
 
 @pytest.mark.parametrize("path", _INPUTS, ids=lambda path: f"{path.parent.name}/{path.name}")
 def test_corpus_input_meets_the_target_contract(path: Path) -> None:
-    _target(path.parent.name).check(path.read_bytes())
+    _target(path.parent.name).test_one_input(path.read_bytes())
