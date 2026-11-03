@@ -88,11 +88,24 @@ def _is_ascii_digits(text: str) -> bool:
     return text.isascii() and text.isdigit()
 
 
+def _content_length(raw: str) -> int | None:
+    """``Content-Length`` as an int; ``None`` (read to EOF) if not ASCII digits.
+
+    Significant digits beyond ``MAX_BODY``'s count mean over ``MAX_BODY``: answered as ``MAX_BODY + 1`` without
+    calling ``int()``, which raises ``ValueError`` past 4300 digits.
+    """
+    if not _is_ascii_digits(raw):
+        return None
+    digits = raw.lstrip("0") or "0"
+    return int(digits) if len(digits) <= len(str(MAX_BODY)) else MAX_BODY + 1
+
+
 def _parse_head(head: bytes) -> tuple[int | None, dict[str, str]]:
     """Status code (``None`` if unparsable) and lower-cased headers of an HTTP response head."""
     status_line, *lines = head.decode("latin-1").split("\r\n")
     parts = status_line.split(" ", 2)
-    status = int(parts[1]) if len(parts) >= 2 and _is_ascii_digits(parts[1]) else None
+    # RFC 9110 status-code is exactly three digits; a longer run could also exceed int()'s digit limit.
+    status = int(parts[1]) if len(parts) >= 2 and len(parts[1]) == 3 and _is_ascii_digits(parts[1]) else None
     headers: dict[str, str] = {}
     for line in lines:
         name, sep, value = line.partition(":")
@@ -161,7 +174,7 @@ async def _read_response(reader: asyncio.StreamReader, method: str, full_url: st
         # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
         return Response(status, await _read_chunked(reader, full_url))
     raw_length = headers.get("content-length", "")
-    length = int(raw_length) if _is_ascii_digits(raw_length) else None  # unparsable: read to EOF
+    length = _content_length(raw_length)
     if length is not None and length > MAX_BODY:
         raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
     received = bytearray()

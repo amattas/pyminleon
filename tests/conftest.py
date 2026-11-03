@@ -30,7 +30,8 @@ class HTTPController:
     0.1 s; both stop when the client hangs up. ``"chunked"`` sends the route's body chunked (``"badchunk"``
     with a malformed size), and
     ``"nolength"`` sends the route's body without a Content-Length header, ``"badstatus"`` answers
-    ``HTTP/1.0 2² OK`` and ``"badlength"`` sends ``Content-Length: ²`` (non-ASCII digits).
+    ``HTTP/1.0 2² OK`` and ``"badlength"`` sends ``Content-Length: ²`` (non-ASCII digits); ``"raw"`` sends the route's
+    body as the entire response, head included.
     """
 
     host: str = "127.0.0.1"
@@ -90,6 +91,9 @@ class HTTPController:
                 await writer.drain()
             elif mode == "badlength":
                 writer.write("HTTP/1.0 200 OK\r\nContent-Length: \u00b2\r\n\r\n".encode("latin-1") + body)
+                await writer.drain()
+            elif mode == "raw":
+                writer.write(body)
                 await writer.drain()
             elif mode in ("chunked", "badchunk"):
                 # What the NDB-Pro firmware sends: HTTP/1.1, chunked, lower-case hex sizes, even to HTTP/1.0 requests.

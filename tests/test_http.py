@@ -50,6 +50,14 @@ def test_url_rejects_malformed_path(path: str) -> None:
         ("badchunk", NDB_CONFIG_JSON, "chunk size"),
         ("badlength", NDB_CONFIG_JSON, None),  # unparsable Content-Length is treated as absent: read to EOF
         ("badstatus", NDB_CONFIG_JSON, "answered None"),  # unparsable status is non-200
+        # Digit runs past int()'s 4300-digit str limit: never a ValueError.
+        ("raw", b"HTTP/1.1 " + b"2" * 5000 + b" OK\r\n\r\n{}", "answered None"),
+        ("raw", b"HTTP/1.1 200 OK\r\nContent-Length: " + b"9" * 5000 + b"\r\n\r\n{}", "more than"),
+        (
+            "raw",
+            b"HTTP/1.1 200 OK\r\nContent-Length: %s%d\r\n\r\n%s" % (b"0" * 5000, len(NDB_CONFIG_JSON), NDB_CONFIG_JSON),
+            None,
+        ),
     ],
     ids=[
         "unframed",
@@ -59,6 +67,9 @@ def test_url_rejects_malformed_path(path: str) -> None:
         "chunked-malformed",
         "non-ascii-length",
         "non-ascii-status",
+        "status-past-int-digit-limit",
+        "length-past-int-digit-limit",
+        "zero-padded-length-past-int-digit-limit",
     ],
 )
 async def test_reads_unframed_or_chunked_body(
