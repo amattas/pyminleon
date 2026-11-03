@@ -36,7 +36,7 @@ dev = [
     "build==1.6.1",
     "bandit==1.9.4",
     # Property tests for the HTML/JSON page parsers. atheris (fuzz/) ships in the ClusterFuzzLite image, not here.
-    "hypothesis==6.170.14",
+    "hypothesis==6.170.12",
     # tests/docs (the docs publishing contract tests) parse YAML.
     "pyyaml==6.0.3",
     "types-PyYAML==6.0.12.20260906",
