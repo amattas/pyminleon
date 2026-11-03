@@ -1,0 +1,23 @@
+# Fuzz — manual deep run (ClusterFuzzLite batch mode, 3600 s per target) of the atheris targets in fuzz/.
+# Pull requests already fuzz each target for 600 s inside Checks (python-ci `fuzz: true`, folded into `security`).
+# Crash handling: see the fleet standard (mattas-net/standards, private; ci-cd/security-scanning).
+name: Fuzz
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    uses: mattas-net/.github/.github/workflows/fuzz-batch.yml@main
+    permissions:
+      contents: read
+      actions: read # ClusterFuzzLite reads workflow artifacts (corpus, builds)
+    with:
+      language: python

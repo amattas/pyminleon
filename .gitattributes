@@ -1,2 +1,3 @@
 *.bin binary
 tests/fixtures/** -text
+fuzz/corpus/** binary

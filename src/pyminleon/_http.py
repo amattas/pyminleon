@@ -27,7 +27,12 @@ _CHUNK_SIZE = re.compile(rb"[0-9A-Fa-f]{1,8}")
 _HOSTNAME = re.compile(r"[A-Za-z0-9.-]+")
 
 # What a failed exchange raises out of ``request``: no route, refused, reset, timed out, or a truncated/oversized head.
-TRANSPORT_ERRORS = (TimeoutError, OSError, asyncio.IncompleteReadError, asyncio.LimitOverrunError)
+TRANSPORT_ERRORS = (
+    TimeoutError,
+    OSError,
+    asyncio.IncompleteReadError,
+    asyncio.LimitOverrunError,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +102,13 @@ def _parse_head(head: bytes) -> tuple[int | None, dict[str, str]]:
 
 
 async def request(
-    host: str, port: int, path: str, *, timeout: float, method: str = "GET", body: bytes | None = None
+    host: str,
+    port: int,
+    path: str,
+    *,
+    timeout: float,
+    method: str = "GET",
+    body: bytes | None = None,
 ) -> Response:
     """One HTTP/1.0 exchange under one deadline. Redirects are never followed.
 
@@ -136,32 +147,41 @@ async def _read_chunked(reader: asyncio.StreamReader, full_url: str) -> bytes:
     return bytes(received)
 
 
+async def _read_response(reader: asyncio.StreamReader, method: str, full_url: str) -> Response:
+    """The response on ``reader``, whose limit must be ``MAX_HEAD``.
+
+    Raises ``ControllerError`` for an oversized or malformed body and ``asyncio.IncompleteReadError`` or
+    ``asyncio.LimitOverrunError`` for a truncated or oversized head or framing line; nothing else.
+    """
+    status, headers = _parse_head(await reader.readuntil(b"\r\n\r\n"))
+    if status != 200:
+        _LOGGER.debug("HTTP %s %s answered %s", method, full_url, status)
+        return Response(status, None)
+    if "chunked" in headers.get("transfer-encoding", "").lower():
+        # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
+        return Response(status, await _read_chunked(reader, full_url))
+    raw_length = headers.get("content-length", "")
+    length = int(raw_length) if _is_ascii_digits(raw_length) else None  # unparsable: read to EOF
+    if length is not None and length > MAX_BODY:
+        raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
+    received = bytearray()
+    while len(received) <= MAX_BODY and (length is None or len(received) < length):
+        chunk = await reader.read(_CHUNK)
+        if not chunk:
+            break
+        received += chunk
+    if len(received) > MAX_BODY:
+        raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
+    return Response(status, bytes(received[:length]))
+
+
 async def _exchange(host_part: str, port: int, payload: bytes, method: str, full_url: str) -> Response:
     writer: asyncio.StreamWriter | None = None
     try:
         reader, writer = await asyncio.open_connection(host_part.strip("[]"), port, limit=MAX_HEAD)
         writer.write(payload)
         await writer.drain()
-        status, headers = _parse_head(await reader.readuntil(b"\r\n\r\n"))
-        if status != 200:
-            _LOGGER.debug("HTTP %s %s answered %s", method, full_url, status)
-            return Response(status, None)
-        if "chunked" in headers.get("transfer-encoding", "").lower():
-            # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
-            return Response(status, await _read_chunked(reader, full_url))
-        raw_length = headers.get("content-length", "")
-        length = int(raw_length) if _is_ascii_digits(raw_length) else None  # unparsable: read to EOF
-        if length is not None and length > MAX_BODY:
-            raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
-        received = bytearray()
-        while len(received) <= MAX_BODY and (length is None or len(received) < length):
-            chunk = await reader.read(_CHUNK)
-            if not chunk:
-                break
-            received += chunk
-        if len(received) > MAX_BODY:
-            raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
-        return Response(status, bytes(received[:length]))
+        return await _read_response(reader, method, full_url)
     finally:
         if writer is not None:
             writer.close()
