@@ -1,0 +1,4 @@
+HTTP/1.1 3202 Found
+Location: http://10.0.0.2/api/config
+Co4tent-Length: 0
+

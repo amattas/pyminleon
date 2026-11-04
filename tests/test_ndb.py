@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from pyminleon import ConfigError, ControllerError, NDBController, NDBPreset, NDBState, identify
+from pyminleon.ndb import _decode_object
 from tests.conftest import NDB_PAGES, NDB_STATUS_JSON, HTTPController
 
 PAGE_EFFECTS = (
@@ -248,7 +249,12 @@ async def test_config_and_status_return_the_raw_documents(
 
 @pytest.mark.parametrize(
     ("body", "match"),
-    [(None, "404"), (b"[1, 2]", "JSON object"), (b"not json", "valid JSON"), (b"\xff\xfe", "UTF-8")],
+    [
+        (None, "404"),
+        (b"[1, 2]", "JSON object"),
+        (b"not json", "valid JSON"),
+        (b"\xff\xfe", "UTF-8"),
+    ],
     ids=["non-200", "not-an-object", "not-json", "not-utf8"],
 )
 @pytest.mark.parametrize("method", ["config", "status"])
@@ -258,6 +264,17 @@ async def test_config_and_status_reject_unusable_answers(
     http_controller.routes[f"/api/{method}"] = body
     with pytest.raises(ControllerError, match=match):
         await getattr(_controller(http_controller), method)()
+
+
+def test_deeply_nested_json_is_not_valid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    # json.loads raises RecursionError past the interpreter's limit, which depends on the platform (C stack size
+    # from Python 3.14); raise it deterministically instead of relying on a huge input.
+    def too_deep(*args: object, **kwargs: object) -> object:
+        raise RecursionError
+
+    monkeypatch.setattr(json, "loads", too_deep)
+    with pytest.raises(ControllerError, match="valid JSON"):
+        _decode_object("{}", "http://ndb/api/status")
 
 
 @pytest.mark.parametrize(

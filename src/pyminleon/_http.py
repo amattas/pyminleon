@@ -83,11 +83,24 @@ def _is_ascii_digits(text: str) -> bool:
     return text.isascii() and text.isdigit()
 
 
+def _content_length(raw: str) -> int | None:
+    """``Content-Length`` as an int; ``None`` (read to EOF) if not ASCII digits.
+
+    Significant digits beyond ``MAX_BODY``'s count mean over ``MAX_BODY``: answered as ``MAX_BODY + 1`` without
+    calling ``int()``, which raises ``ValueError`` past 4300 digits.
+    """
+    if not _is_ascii_digits(raw):
+        return None
+    digits = raw.lstrip("0") or "0"
+    return int(digits) if len(digits) <= len(str(MAX_BODY)) else MAX_BODY + 1
+
+
 def _parse_head(head: bytes) -> tuple[int | None, dict[str, str]]:
     """Status code (``None`` if unparsable) and lower-cased headers of an HTTP response head."""
     status_line, *lines = head.decode("latin-1").split("\r\n")
     parts = status_line.split(" ", 2)
-    status = int(parts[1]) if len(parts) >= 2 and _is_ascii_digits(parts[1]) else None
+    # RFC 9110 status-code is exactly three digits; a longer run could also exceed int()'s digit limit.
+    status = int(parts[1]) if len(parts) >= 2 and len(parts[1]) == 3 and _is_ascii_digits(parts[1]) else None
     headers: dict[str, str] = {}
     for line in lines:
         name, sep, value = line.partition(":")
@@ -117,12 +130,28 @@ async def request(
 
 
 async def _read_chunked(reader: asyncio.StreamReader, full_url: str) -> bytes:
-    """A chunked body, capped at ``MAX_BODY``; trailers are skipped. ``ControllerError`` on malformed framing."""
+    """A chunked body, capped at ``MAX_BODY``. ``ControllerError`` on malformed framing.
+
+    Chunk extensions and trailer fields are skipped, but together they are capped at ``MAX_HEAD`` bytes: each line is
+    already bounded by the reader's limit, and this bounds their number, so a server cannot stream framing forever.
+    """
     received = bytearray()
+    skipped = 0
+
+    def skip(count: int, what: str) -> None:
+        nonlocal skipped
+        skipped += count
+        if skipped > MAX_HEAD:
+            raise ControllerError(
+                f"{full_url} sent more than {MAX_HEAD} bytes of chunk extensions and trailers ({what})"
+            )
+
     while True:
-        size_text = (await reader.readuntil(b"\r\n"))[:-2].split(b";", 1)[0].strip()
+        line = (await reader.readuntil(b"\r\n"))[:-2]
+        size_text = line.split(b";", 1)[0].strip()
         if not _CHUNK_SIZE.fullmatch(size_text):
             raise ControllerError(f"{full_url} sent a malformed chunk size {size_text[:20]!r}")
+        skip(len(line) - len(size_text), "extensions")
         size = int(size_text, 16)
         if size == 0:
             break
@@ -131,9 +160,37 @@ async def _read_chunked(reader: asyncio.StreamReader, full_url: str) -> bytes:
         received += await reader.readexactly(size)
         if await reader.readexactly(2) != b"\r\n":
             raise ControllerError(f"{full_url} sent a chunk without its closing CRLF")
-    while (await reader.readuntil(b"\r\n")) != b"\r\n":
-        pass  # trailer fields
+    while (line := await reader.readuntil(b"\r\n")) != b"\r\n":
+        skip(len(line), "trailers")
     return bytes(received)
+
+
+async def _read_response(reader: asyncio.StreamReader, method: str, full_url: str) -> Response:
+    """The response on ``reader``, whose limit must be ``MAX_HEAD``.
+
+    Raises ``ControllerError`` for an oversized or malformed body and ``asyncio.IncompleteReadError`` or
+    ``asyncio.LimitOverrunError`` for a truncated or oversized head or framing line; nothing else.
+    """
+    status, headers = _parse_head(await reader.readuntil(b"\r\n\r\n"))
+    if status != 200:
+        _LOGGER.debug("HTTP %s %s answered %s", method, full_url, status)
+        return Response(status, None)
+    if "chunked" in headers.get("transfer-encoding", "").lower():
+        # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
+        return Response(status, await _read_chunked(reader, full_url))
+    raw_length = headers.get("content-length", "")
+    length = _content_length(raw_length)
+    if length is not None and length > MAX_BODY:
+        raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
+    received = bytearray()
+    while len(received) <= MAX_BODY and (length is None or len(received) < length):
+        chunk = await reader.read(_CHUNK)
+        if not chunk:
+            break
+        received += chunk
+    if len(received) > MAX_BODY:
+        raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
+    return Response(status, bytes(received[:length]))
 
 
 async def _exchange(host_part: str, port: int, payload: bytes, method: str, full_url: str) -> Response:
@@ -142,26 +199,7 @@ async def _exchange(host_part: str, port: int, payload: bytes, method: str, full
         reader, writer = await asyncio.open_connection(host_part.strip("[]"), port, limit=MAX_HEAD)
         writer.write(payload)
         await writer.drain()
-        status, headers = _parse_head(await reader.readuntil(b"\r\n\r\n"))
-        if status != 200:
-            _LOGGER.debug("HTTP %s %s answered %s", method, full_url, status)
-            return Response(status, None)
-        if "chunked" in headers.get("transfer-encoding", "").lower():
-            # The NDB-Pro answers HTTP/1.0 requests with HTTP/1.1 chunked bodies.
-            return Response(status, await _read_chunked(reader, full_url))
-        raw_length = headers.get("content-length", "")
-        length = int(raw_length) if _is_ascii_digits(raw_length) else None  # unparsable: read to EOF
-        if length is not None and length > MAX_BODY:
-            raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
-        received = bytearray()
-        while len(received) <= MAX_BODY and (length is None or len(received) < length):
-            chunk = await reader.read(_CHUNK)
-            if not chunk:
-                break
-            received += chunk
-        if len(received) > MAX_BODY:
-            raise ControllerError(f"{full_url} returned more than {MAX_BODY} bytes")
-        return Response(status, bytes(received[:length]))
+        return await _read_response(reader, method, full_url)
     finally:
         if writer is not None:
             writer.close()
