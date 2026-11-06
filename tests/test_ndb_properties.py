@@ -10,11 +10,12 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from pyminleon import ControllerError, NDBPreset
+from pyminleon import ControllerError, NDBPalette, NDBPreset
 from pyminleon.ndb import (
     _decode_object,
     _parse_effects,
     _parse_intensity,
+    _parse_palette,
     _parse_presets,
 )
 from tests.conftest import NDB_CONFIG_JSON, NDB_PAGES, NDB_STATUS_JSON
@@ -50,6 +51,11 @@ def _presets_ok(result: tuple[NDBPreset, ...]) -> bool:
     )
 
 
+def _palette_ok(result: NDBPalette) -> bool:
+    rgbs = (*result.colors, result.background)
+    return len(result.colors) == 5 and all(len(rgb) == 3 and all(0 <= c <= 255 for c in rgb) for rgb in rgbs)
+
+
 @pytest.mark.parametrize(
     ("parse", "valid"),
     [
@@ -57,8 +63,9 @@ def _presets_ok(result: tuple[NDBPreset, ...]) -> bool:
         (_parse_effects, _effects_ok),
         (_parse_intensity, lambda result: result is None or 0 <= result <= 100),
         (_parse_presets, _presets_ok),
+        (_parse_palette, _palette_ok),
     ],
-    ids=["json-object", "effects", "intensity", "presets"],
+    ids=["json-object", "effects", "intensity", "presets", "palette"],
 )
 @given(page=st.one_of(_pages(), st.lists(_SPLICE, max_size=40).map("".join)))
 def test_parser_returns_a_valid_result_or_raises_controller_error(
