@@ -32,7 +32,7 @@ pip install pyminleon
 ```python
 import asyncio
 
-from pyminleon import NDBController, identify
+from pyminleon import WARM_WHITE, NDBController, identify
 
 
 async def main() -> None:
@@ -44,6 +44,7 @@ async def main() -> None:
     state = await ndb.state()  # NDBState(effect="Glow", intensity=100, effects=("Off", ..., "Worms"))
     await ndb.set_effect("Color Wave")
     await ndb.set_intensity(60)
+    await ndb.set_palette([(255, 0, 0), WARM_WHITE])  # slots 3-5 emptied
     await ndb.recall_preset(3)  # slots 0-9 are "Show 1", 10-19 "Show 2"
     layout = await ndb.config()  # raw JSON from GET /api/config (DDP-spec layout document)
     print(state, layout["config"]["ports"][0], (await ndb.status())["status"]["mod"])
@@ -58,6 +59,12 @@ asyncio.run(main())
     - `await state() -> NDBState` selected effect, intensity, and every effect the controller offers
     - `await presets() -> tuple[NDBPreset, ...]` stored show slots
     - `await set_effect(name)`, `await set_intensity(percent)`, `await recall_preset(slot)`
+    - `await palette() -> NDBPalette` custom colors 1-5 (`NO_COLOR` when empty; `.active` lists the
+      non-empty ones) and the background color, as `RGB` tuples
+    - `await set_color(slot, rgb)` one slot (1-5, or `BACKGROUND_SLOT` 6); `await set_palette(colors, *,
+      background=None)` makes the custom colors exactly `colors` (up to 5; the rest are emptied, and none
+      at all means automatic random colors). `COOL_WHITE` and `WARM_WHITE` are the values the colors page's
+      white buttons send, which the controller maps to its white LED
     - `await config() -> dict[str, Any]`, `await status() -> dict[str, Any]` raw `/api/config` and `/api/status` documents
 - `await identify(host, *, port=80, timeout=3.0) -> str | None` the model id (e.g. `"NDBPRO"`) if the host reports a
   model in `SUPPORTED_MODELS`; `None` if it answers but is not a supported Minleon, or does not answer in time

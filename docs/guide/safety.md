@@ -8,7 +8,7 @@ deliberately narrow about what it sends.
   `saveon`. The only requests it makes are `POST /api/control`,
   `GET /pshows.html?r=N` (recall), and read-only pages (`/pfx2.html`,
   `/pcolors.html`, `/pshows.html`, `/api/config`, `/api/status`).
-- **Strict parsing.** `state()` and `presets()` parse the web UI's HTML with strict
+- **Strict parsing.** `state()`, `presets()` and `palette()` parse the web UI's HTML with strict
   patterns written against firmware 2.0 and raise `ControllerError` on anything
   else rather than guessing.
 - **Bounded I/O.** HTTP responses are size-capped (64 KiB), redirects are never

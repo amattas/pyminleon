@@ -10,7 +10,19 @@ from typing import Any
 
 import pytest
 
-from pyminleon import ConfigError, ControllerError, NDBController, NDBPreset, NDBState, identify
+from pyminleon import (
+    BACKGROUND_SLOT,
+    COOL_WHITE,
+    NO_COLOR,
+    WARM_WHITE,
+    ConfigError,
+    ControllerError,
+    NDBController,
+    NDBPalette,
+    NDBPreset,
+    NDBState,
+    identify,
+)
 from pyminleon.ndb import _decode_object
 from tests.conftest import NDB_PAGES, NDB_STATUS_JSON, HTTPController
 
@@ -94,8 +106,24 @@ async def test_presets_parse_captured_page(http_controller: HTTPController) -> N
         (lambda c: c.set_intensity(100), ("POST", "/api/control", b'{"int":"100"}')),
         (lambda c: c.recall_preset(0), ("GET", "/pshows.html?r=0", b"")),
         (lambda c: c.recall_preset(19), ("GET", "/pshows.html?r=19", b"")),
+        (lambda c: c.set_color(1, (190, 56, 243)), ("POST", "/api/control", b'{"color":{"i":1,"c":"#be38f3"}}')),
+        (lambda c: c.set_color(5, [0, 0, 0]), ("POST", "/api/control", b'{"color":{"i":5,"c":"#000000"}}')),
+        (
+            lambda c: c.set_color(BACKGROUND_SLOT, COOL_WHITE),
+            ("POST", "/api/control", b'{"color":{"i":6,"c":"#feffff"}}'),
+        ),
     ],
-    ids=["effect", "effect-escaped", "intensity-0", "intensity-100", "recall-0", "recall-19"],
+    ids=[
+        "effect",
+        "effect-escaped",
+        "intensity-0",
+        "intensity-100",
+        "recall-0",
+        "recall-19",
+        "color",
+        "color-list",
+        "background",
+    ],
 )
 async def test_commands_send_exact_request(
     http_controller: HTTPController, call: Any, expected: tuple[str, str, bytes]
@@ -120,6 +148,18 @@ async def test_commands_send_exact_request(
         (lambda c: c.recall_preset(20), "slot"),
         (lambda c: c.recall_preset(False), "slot"),
         (lambda c: c.recall_preset("1"), "slot"),
+        (lambda c: c.set_color(0, NO_COLOR), "slot"),
+        (lambda c: c.set_color(7, NO_COLOR), "slot"),
+        (lambda c: c.set_color(True, NO_COLOR), "slot"),
+        (lambda c: c.set_color(1, (256, 0, 0)), "color"),
+        (lambda c: c.set_color(1, (0, -1, 0)), "color"),
+        (lambda c: c.set_color(1, (0, 0, True)), "color"),
+        (lambda c: c.set_color(1, (0, 0, 1.0)), "color"),
+        (lambda c: c.set_color(1, (0, 0)), "color"),
+        (lambda c: c.set_color(1, "#ffffff"), "color"),
+        (lambda c: c.set_palette([NO_COLOR] * 6), "5 colors"),
+        (lambda c: c.set_palette([COOL_WHITE, (0, 0, 300)]), "color"),
+        (lambda c: c.set_palette([COOL_WHITE], background=(1, 2)), "color"),
     ],
 )
 async def test_commands_reject_invalid_arguments(http_controller: HTTPController, call: Any, match: str) -> None:
@@ -157,6 +197,7 @@ async def test_unreachable_controller_raises_controller_error() -> None:
         (lambda c: c.state(), "/pfx2.html"),
         (lambda c: c.state(), "/pcolors.html"),
         (lambda c: c.presets(), "/pshows.html"),
+        (lambda c: c.palette(), "/pcolors.html"),
         (lambda c: c.set_effect("Off"), "/api/control"),
         (lambda c: c.recall_preset(3), "/pshows.html"),
     ],
@@ -236,6 +277,72 @@ async def test_presets_reject_unusable_page(http_controller: HTTPController, bod
     http_controller.routes["/pshows.html"] = body
     with pytest.raises(ControllerError, match="pshows"):
         await _controller(http_controller).presets()
+
+
+async def test_palette_parses_captured_page(http_controller: HTTPController) -> None:
+    palette = await _controller(http_controller).palette()
+    assert palette == NDBPalette(colors=((190, 56, 243), NO_COLOR, NO_COLOR, NO_COLOR, NO_COLOR), background=NO_COLOR)
+    assert palette.active == ((190, 56, 243),)
+    assert http_controller.calls == [("GET", "/pcolors.html", b"")]
+
+
+_BC1 = b"<td id='bc1' bgcolor=\"#be38f3\">"
+_BC6 = b"<td id='bc6' bgcolor=\"#000000\">"
+
+
+@pytest.mark.parametrize(
+    ("page", "body", "match"),
+    [
+        _sub("/pcolors.html", _BC6, b"<td>", "bc6"),
+        _sub("/pcolors.html", _BC6, _BC1, "bc1"),
+        _sub("/pcolors.html", _BC1, b"<td id='bc1' bgcolor=\"#be38fg\">", "recognize"),
+        _sub("/pcolors.html", _BC1, b"<td id='bc1' bgcolor=\"#fff\">", "recognize"),
+        _sub("/pcolors.html", _BC1, b"<td id='bc1' bgcolor='#be38f3'>", "recognize"),
+        _sub("/pcolors.html", _BC6, b"<td id='bc7' bgcolor=\"#000000\">", "bc7"),
+    ],
+    ids=["missing-cell", "duplicate-cell", "bad-hex", "short-hex", "cell-unparsable", "unknown-slot"],
+)
+async def test_palette_rejects_unusable_page(
+    http_controller: HTTPController, page: str, body: bytes, match: str
+) -> None:
+    http_controller.routes[page] = body
+    with pytest.raises(ControllerError, match=match):
+        await _controller(http_controller).palette()
+
+
+def _color_body(slot: int, hex_color: str) -> tuple[str, str, bytes]:
+    return "POST", "/api/control", b'{"color":{"i":%d,"c":"%s"}}' % (slot, hex_color.encode())
+
+
+@pytest.mark.parametrize(
+    ("colors", "background", "expected"),
+    [
+        ([], None, [_color_body(i, "#000000") for i in range(1, 6)]),
+        (
+            [COOL_WHITE, WARM_WHITE],
+            None,
+            [_color_body(1, "#feffff"), _color_body(2, "#ffffff"), *(_color_body(i, "#000000") for i in range(3, 6))],
+        ),
+        (
+            [(1, 2, 3), (16, 32, 48), (255, 0, 0), (0, 255, 0), (0, 0, 255)],
+            (10, 11, 12),
+            [
+                _color_body(1, "#010203"),
+                _color_body(2, "#102030"),
+                _color_body(3, "#ff0000"),
+                _color_body(4, "#00ff00"),
+                _color_body(5, "#0000ff"),
+                _color_body(6, "#0a0b0c"),
+            ],
+        ),
+    ],
+    ids=["clear-to-random", "partial-fills-rest-empty", "full-with-background"],
+)
+async def test_set_palette_writes_every_custom_slot_in_order(
+    http_controller: HTTPController, colors: list[tuple[int, int, int]], background: Any, expected: list[Any]
+) -> None:
+    await _controller(http_controller).set_palette(colors, background=background)
+    assert http_controller.calls == expected
 
 
 @pytest.mark.parametrize(("method", "path"), [("config", "/api/config"), ("status", "/api/status")])
@@ -334,11 +441,13 @@ async def test_never_saves_to_the_controller(http_controller: HTTPController) ->
     controller = _controller(http_controller)
     await controller.state()
     await controller.presets()
+    await controller.palette()
     await controller.config()
     await controller.status()
     await identify(http_controller.host, port=http_controller.port)
     await controller.set_effect("Glow")
     await controller.set_intensity(50)
+    await controller.set_palette([COOL_WHITE], background=WARM_WHITE)
     for slot in range(20):
         await controller.recall_preset(slot)
     reads = {"/pfx2.html", "/pcolors.html", "/pshows.html", "/api/config", "/api/status"}
